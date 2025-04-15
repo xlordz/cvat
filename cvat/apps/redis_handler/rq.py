@@ -42,11 +42,12 @@ class RequestId:
     FIELD_SEP: ClassVar[str] = "&"
     KEY_VAL_SEP: ClassVar[str] = "="
 
-    SPECIAL_CHARS = {FIELD_SEP, KEY_VAL_SEP, "/", "."}
     ENCODE_MAPPING = {
         ".": "@",
+        " ": "-",
     }
     DECODE_MAPPING = {v: k for k, v in ENCODE_MAPPING.items()}
+    NOT_ALLOWED_CHARS = {FIELD_SEP, KEY_VAL_SEP, "/"} | set(DECODE_MAPPING.keys())
 
     TYPE_SEP: ClassVar[str] = ":"  # used in serialization logic
 
@@ -76,16 +77,13 @@ class RequestId:
     def normalize(cls, repr_: dict[str, Any]) -> None:
         for key, value in repr_.items():
             str_value = str(value)
+            if chars := (cls.NOT_ALLOWED_CHARS & set(str_value)):
+                raise IncorrectRequestIdError(f"{key} contains special characters: {chars!r}")
 
-            for spec_char in cls.SPECIAL_CHARS:
-                if spec_char in str_value:
-                    if spec_char in cls.ENCODE_MAPPING:
-                        str_value = str_value.replace(spec_char, cls.ENCODE_MAPPING[spec_char])
-                        continue
+            for from_char, to_char in cls.ENCODE_MAPPING.items():
+                if from_char in str_value:
+                    str_value = str_value.replace(from_char, to_char)
 
-                    raise IncorrectRequestIdError(
-                        f"{key} contains special characters: {spec_char!r}"
-                    )
             repr_[key] = str_value
 
     def render(self) -> str:
